@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.setReferenceBtn.textContent = referenceState ? 'Referenz gesetzt' : 'Referenz festlegen';
 
         if (referenceState) {
-            dom.referenceDetails.classList.remove('invisible');
+            dom.referenceDetails.classList.add('visible');
             const changeAbs = currentTotalCost - referenceState.cost;
             const changePerc = referenceState.cost > 0 ? (changeAbs / referenceState.cost) * 100 : 0;
             const sign = changeAbs >= 0 ? '+' : '';
@@ -247,8 +247,6 @@ document.addEventListener('DOMContentLoaded', () => {
             dom.rhAenderung.textContent = `${deltaRh >= 0 ? '+' : ''}${deltaRh.toFixed(1)} %`;
             const deltaVol = inputs.volumenstrom - referenceState.vol;
             dom.volumenAenderung.textContent = `${deltaVol >= 0 ? '+' : ''}${deltaVol.toFixed(0)} m³/h`;
-        } else {
-            dom.referenceDetails.classList.add('invisible');
         }
     }
     
@@ -284,6 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         referenceState = null;
         dom.resetSlidersBtn.disabled = true;
+        dom.referenceDetails.classList.add('invisible');
         
         syncAllSlidersToInputs();
         handleKuehlerToggle();
@@ -308,16 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function syncAllSlidersToInputs(){
-        const tempVal = parseFloat(dom.tempZuluft.value);
-        if(!isNaN(tempVal)) {
-            dom.tempZuluftSlider.min = (tempVal - 6).toFixed(1);
-            dom.tempZuluftSlider.max = (tempVal + 6).toFixed(1);
-        }
-        const volVal = parseFloat(dom.volumenstrom.value);
-        if(!isNaN(volVal)) {
-            dom.volumenstromSlider.min = Math.round(volVal * 0.5 / 100) * 100;
-            dom.volumenstromSlider.max = Math.round(volVal * 1.5 / 100) * 100;
-        }
         syncSliderToInput(dom.volumenstrom, dom.volumenstromSlider, dom.volumenstromLabel);
         syncSliderToInput(dom.tempZuluft, dom.tempZuluftSlider, dom.tempZuluftLabel, true);
         syncSliderToInput(dom.rhZuluft, dom.rhZuluftSlider, dom.rhZuluftLabel, true);
@@ -325,10 +314,29 @@ document.addEventListener('DOMContentLoaded', () => {
     function syncSliderToInput(input, slider, label, isFloat = false) {
         const newValue = parseFloat(input.value);
         if(isNaN(newValue)) return;
+        
+        if (input.id === 'volumenstrom') {
+            slider.min = Math.round(newValue * 0.5 / 100) * 100;
+            slider.max = Math.round(newValue * 1.5 / 100) * 100;
+        }
+        if (input.id === 'tempZuluft') {
+            slider.min = (newValue - 6).toFixed(1);
+            slider.max = (newValue + 6).toFixed(1);
+        }
         slider.value = newValue;
         label.textContent = isFloat ? newValue.toFixed(1) : newValue;
     }
 
+    function updateBetriebszeit(sourceId) {
+        if (sourceId === 'betriebsstundenGesamt') {
+            const stunden = parseFloat(dom.betriebsstundenGesamt.value);
+            if (!isNaN(stunden)) dom.betriebstageGesamt.value = (stunden / 24).toFixed(1);
+        } else if (sourceId === 'betriebstageGesamt') {
+            const tage = parseFloat(dom.betriebstageGesamt.value);
+            if (!isNaN(tage)) dom.betriebsstundenGesamt.value = (tage * 24).toFixed(0);
+        }
+    }
+    
     function storeInitialValues() {
         allInteractiveElements.forEach(el => {
             if (el.type === 'checkbox' || el.type === 'radio') {
@@ -338,33 +346,47 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
+
+    // --- INITIALIZATION: Clean and explicit event listeners ---
     function addEventListeners() {
+        // Buttons
         dom.resetBtn.addEventListener('click', resetToDefaults);
         dom.resetSlidersBtn.addEventListener('click', resetSlidersToRef);
         dom.setReferenceBtn.addEventListener('click', handleSetReference);
 
-        const allInputs = document.querySelectorAll('input, select');
-        allInputs.forEach(el => {
-            const eventType = (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'radio') ? 'change' : 'input';
-            if (!el.id.includes('reset') && !el.id.includes('setReference')) {
-                 el.addEventListener(eventType, (e) => {
-                    enforceLimits(e.target);
-                    if (e.target.id.includes('Slider')) {
-                        const inputId = e.target.id.replace('Slider', '');
-                        const isFloat = inputId !== 'volumenstrom';
-                        const value = isFloat ? parseFloat(e.target.value).toFixed(1) : e.target.value;
-                        dom[inputId].value = value;
-                        dom[inputId+'Label'].textContent = value;
-                    } else if (dom[e.target.id + 'Slider']) {
-                        syncAllSlidersToInputs();
-                    }
-                    if (['kuehlerAktiv', 'kuehlmodus', 'feuchteSollTyp'].includes(e.target.id)) {
-                        handleKuehlerToggle();
-                    }
-                    calculateAll();
-                });
-            }
+        // Toggles and Selects
+        const toggles = [dom.kuehlerAktiv, dom.feuchteSollTyp, dom.kuehlmodus, dom.fanCostActive];
+        toggles.forEach(toggle => toggle.addEventListener('change', () => { handleKuehlerToggle(); calculateAll(); }));
+
+        // Simple Inputs
+        const simpleInputs = [ dom.tempAussen, dom.rhAussen, dom.druck, dom.preisWaerme, dom.preisStrom, dom.preisKaelte, dom.xZuluft, dom.tempHeizVorlauf, dom.tempHeizRuecklauf, dom.tempKuehlVorlauf, dom.tempKuehlRuecklauf, dom.sfp, dom.stundenHeizen, dom.stundenKuehlen ];
+        simpleInputs.forEach(input => input.addEventListener('input', () => { enforceLimits(input); calculateAll(); }));
+        
+        // Linked Inputs (Hours/Days)
+        dom.betriebsstundenGesamt.addEventListener('input', (e) => { enforceLimits(e.target); updateBetriebszeit(e.target.id); calculateAll(); });
+        dom.betriebstageGesamt.addEventListener('input', (e) => { enforceLimits(e.target); updateBetriebszeit(e.target.id); calculateAll(); });
+
+        // Synced Inputs (Number boxes)
+        const syncedNumberInputs = [dom.volumenstrom, dom.tempZuluft, dom.rhZuluft];
+        syncedNumberInputs.forEach(input => {
+            input.addEventListener('input', () => {
+                enforceLimits(input);
+                syncAllSlidersToInputs();
+                calculateAll();
+            });
+        });
+        
+        // Synced Inputs (Sliders)
+        const sliders = [dom.volumenstromSlider, dom.tempZuluftSlider, dom.rhZuluftSlider];
+        sliders.forEach(slider => {
+            slider.addEventListener('input', () => {
+                const inputId = slider.id.replace('Slider', '');
+                const isFloat = inputId !== 'volumenstrom';
+                const value = isFloat ? parseFloat(slider.value).toFixed(1) : slider.value;
+                dom[inputId].value = value;
+                dom[inputId+'Label'].textContent = value;
+                calculateAll();
+            });
         });
     }
 
