@@ -130,7 +130,6 @@ h5 { font-size: 1rem; color: #333; margin-bottom: 0.8rem; }
 
 
 .main-config-section { padding: 0.5rem; background-color: #fafafa; border-radius: 8px;}
-.main-config-section .input-group { padding: 0 1rem; }
 .main-config-section .input-group.disabled { opacity: 0.5; pointer-events: none; }
 .switch-container {
     display: flex;
