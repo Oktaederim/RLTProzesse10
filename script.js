@@ -301,22 +301,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleKuehlerToggle() {
         const isActive = dom.kuehlerAktiv.checked;
-        dom.kuehlmodusWrapper.classList.toggle('hidden', !isActive);
+        dom.kuehlmodusWrapper.classList.toggle('disabled', !isActive);
+        dom.kuehlmodus.disabled = !isActive;
         const isDehumidify = dom.kuehlmodus.value === 'dehumidify';
         dom.sollFeuchteWrapper.style.display = isActive && isDehumidify ? 'block' : 'none';
     }
+
+    function updateBetriebszeit(sourceId) {
+        if (sourceId === 'betriebsstundenGesamt') {
+            const stunden = parseFloat(dom.betriebsstundenGesamt.value);
+            if (!isNaN(stunden)) dom.betriebstageGesamt.value = (stunden / 24).toFixed(1);
+        } else if (sourceId === 'betriebstageGesamt') {
+            const tage = parseFloat(dom.betriebstageGesamt.value);
+            if (!isNaN(tage)) dom.betriebsstundenGesamt.value = (tage * 24).toFixed(0);
+        }
+    }
     
     function syncAllSlidersToInputs(){
-        const tempVal = parseFloat(dom.tempZuluft.value);
-        if(!isNaN(tempVal)) {
-            dom.tempZuluftSlider.min = (tempVal - 6).toFixed(1);
-            dom.tempZuluftSlider.max = (tempVal + 6).toFixed(1);
-        }
-        const volVal = parseFloat(dom.volumenstrom.value);
-        if(!isNaN(volVal)) {
-            dom.volumenstromSlider.min = Math.round(volVal * 0.5 / 100) * 100;
-            dom.volumenstromSlider.max = Math.round(volVal * 1.5 / 100) * 100;
-        }
         syncSliderToInput(dom.volumenstrom, dom.volumenstromSlider, dom.volumenstromLabel);
         syncSliderToInput(dom.tempZuluft, dom.tempZuluftSlider, dom.tempZuluftLabel, true);
         syncSliderToInput(dom.rhZuluft, dom.rhZuluftSlider, dom.rhZuluftLabel, true);
@@ -324,6 +325,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function syncSliderToInput(input, slider, label, isFloat = false) {
         const newValue = parseFloat(input.value);
         if(isNaN(newValue)) return;
+        
+        if (input.id === 'volumenstrom') {
+            slider.min = Math.round(newValue * 0.5 / 100) * 100;
+            slider.max = Math.round(newValue * 1.5 / 100) * 100;
+        }
+        if (input.id === 'tempZuluft') {
+            slider.min = (newValue - 6).toFixed(1);
+            slider.max = (newValue + 6).toFixed(1);
+        }
         slider.value = newValue;
         label.textContent = isFloat ? newValue.toFixed(1) : newValue;
     }
@@ -354,22 +364,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- INITIALIZATION: Clean and explicit event listeners ---
+    // --- INITIALIZATION ---
     function addEventListeners() {
-        // Simple inputs
-        const simpleInputs = [
-            dom.tempAussen, dom.rhAussen, dom.druck, dom.preisWaerme, dom.xZuluft, 
-            dom.tempHeizVorlauf, dom.tempHeizRuecklauf, dom.tempKuehlVorlauf, dom.tempKuehlRuecklauf,
-            dom.stundenHeizen, dom.stundenKuehlen, dom.sfp, dom.betriebsstundenGesamt, dom.betriebstageGesamt
-        ];
-        simpleInputs.forEach(input => input.addEventListener('input', () => {enforceLimits(input); calculateAll();}));
-
-        // Cost dependency inputs
-        const costDepInputs = [dom.preisStrom, dom.eer, dom.preisKaelte];
-        costDepInputs.forEach(input => input.addEventListener('input', () => {enforceLimits(input); updateCostDependencies(); calculateAll();}));
-        dom.kaelteBasisInputs.forEach(radio => radio.addEventListener('change', () => {updateCostDependencies(); calculateAll();}));
+        dom.resetBtn.addEventListener('click', resetToDefaults);
+        dom.resetSlidersBtn.addEventListener('click', resetSlidersToRef);
+        dom.setReferenceBtn.addEventListener('click', handleSetReference);
         
-        // Synced inputs (number boxes)
+        const inputs = [
+            dom.tempAussen, dom.rhAussen, dom.druck, dom.preisWaerme, dom.xZuluft, dom.sfp,
+            dom.tempHeizVorlauf, dom.tempHeizRuecklauf, dom.tempKuehlVorlauf, dom.tempKuehlRuecklauf
+        ];
+        inputs.forEach(input => input.addEventListener('input', () => { enforceLimits(input); calculateAll(); }));
+        
+        const costDepInputs = [dom.preisStrom, dom.eer, dom.preisKaelte];
+        costDepInputs.forEach(input => input.addEventListener('input', () => { enforceLimits(input); updateCostDependencies(); calculateAll(); }));
+        dom.kaelteBasisInputs.forEach(radio => radio.addEventListener('change', () => { updateCostDependencies(); calculateAll(); }));
+        
         const syncedNumberInputs = [dom.volumenstrom, dom.tempZuluft, dom.rhZuluft];
         syncedNumberInputs.forEach(input => {
             input.addEventListener('input', () => {
@@ -379,27 +389,23 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
         
-        // Synced inputs (sliders)
         const sliders = [dom.volumenstromSlider, dom.tempZuluftSlider, dom.rhZuluftSlider];
         sliders.forEach(slider => {
-            slider.addEventListener('input', () => {
-                const inputId = slider.id.replace('Slider', '');
+            slider.addEventListener('input', (e) => {
+                const inputId = e.target.id.replace('Slider', '');
                 const isFloat = inputId !== 'volumenstrom';
-                const value = isFloat ? parseFloat(slider.value).toFixed(1) : slider.value;
+                const value = isFloat ? parseFloat(e.target.value).toFixed(1) : e.target.value;
                 dom[inputId].value = value;
                 dom[inputId+'Label'].textContent = value;
                 calculateAll();
             });
         });
 
-        // Toggles and Selects
         const toggles = [dom.kuehlerAktiv, dom.feuchteSollTyp, dom.kuehlmodus, dom.fanCostActive];
         toggles.forEach(toggle => toggle.addEventListener('change', () => { handleKuehlerToggle(); calculateAll(); }));
-        
-        // Buttons
-        dom.resetBtn.addEventListener('click', resetToDefaults);
-        dom.resetSlidersBtn.addEventListener('click', resetSlidersToRef);
-        dom.setReferenceBtn.addEventListener('click', handleSetReference);
+
+        dom.betriebsstundenGesamt.addEventListener('input', (e) => { enforceLimits(e.target); updateBetriebszeit(e.target.id); calculateAll(); });
+        dom.betriebstageGesamt.addEventListener('input', (e) => { enforceLimits(e.target); updateBetriebszeit(e.target.id); calculateAll(); });
     }
 
     addEventListeners();
