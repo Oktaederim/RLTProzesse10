@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gesamtleistungWaerme: document.getElementById('gesamtleistungWaerme'), gesamtleistungKaelte: document.getElementById('gesamtleistungKaelte'),
         kostenHeizung: document.getElementById('kostenHeizung'), kostenKuehlung: document.getElementById('kostenKuehlung'),
         kostenGesamt: document.getElementById('kostenGesamt'), setReferenceBtn: document.getElementById('setReferenceBtn'),
-        kuehlmodus: document.getElementById('kuehlmodus'), kuehlmodusWrapper: document.getElementById('kuehlmodusWrapper'),
+        kuehlmodus: document.querySelectorAll('input[name="kuehlmodus"]'), kuehlmodusWrapper: document.getElementById('kuehlmodusWrapper'),
         sollFeuchteWrapper: document.getElementById('sollFeuchteWrapper'),
         tempHeizVorlauf: document.getElementById('tempHeizVorlauf'), tempHeizRuecklauf: document.getElementById('tempHeizRuecklauf'),
         tempKuehlVorlauf: document.getElementById('tempKuehlVorlauf'), tempKuehlRuecklauf: document.getElementById('tempKuehlRuecklauf'),
@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
             kuehlerAktiv: dom.kuehlerAktiv.checked, tempVorerhitzerSoll: 5.0,
             druck: parseFloat(dom.druck.value) * 100, feuchteSollTyp: dom.feuchteSollTyp.value,
             preisWaerme: parseFloat(dom.preisWaerme.value), preisStrom: parseFloat(dom.preisStrom.value),
-            kuehlmodus: dom.kuehlmodus.value,
+            kuehlmodus: document.querySelector('input[name="kuehlmodus"]:checked').value,
             tempHeizVorlauf: parseFloat(dom.tempHeizVorlauf.value), tempHeizRuecklauf: parseFloat(dom.tempHeizRuecklauf.value),
             tempKuehlVorlauf: parseFloat(dom.tempKuehlVorlauf.value), tempKuehlRuecklauf: parseFloat(dom.tempKuehlRuecklauf.value),
             preisKaelte: parseFloat(dom.preisKaelte.value),
@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.setReferenceBtn.textContent = referenceState ? 'Referenz gesetzt' : 'Referenz festlegen';
 
         if (referenceState) {
-            dom.referenceDetails.classList.add('visible');
+            dom.referenceDetails.classList.remove('invisible');
             const changeAbs = currentTotalCost - referenceState.cost;
             const changePerc = referenceState.cost > 0 ? (changeAbs / referenceState.cost) * 100 : 0;
             const sign = changeAbs >= 0 ? '+' : '';
@@ -248,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const deltaVol = inputs.volumenstrom - referenceState.vol;
             dom.volumenAenderung.textContent = `${deltaVol >= 0 ? '+' : ''}${deltaVol.toFixed(0)} m³/h`;
         } else {
-            dom.referenceDetails.classList.remove('visible');
+             dom.referenceDetails.classList.add('invisible');
         }
     }
     
@@ -273,7 +273,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleSetReference() {
         referenceState = { cost: currentTotalCost, temp: parseFloat(dom.tempZuluft.value), rh: parseFloat(dom.rhZuluft.value), vol: parseFloat(dom.volumenstrom.value) };
         dom.resetSlidersBtn.disabled = false;
-        dom.referenceDetails.classList.remove('invisible');
         calculateAll();
     }
     
@@ -284,7 +283,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         referenceState = null;
         dom.resetSlidersBtn.disabled = true;
-        dom.referenceDetails.classList.add('invisible');
         
         syncAllSlidersToInputs();
         handleKuehlerToggle();
@@ -303,22 +301,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleKuehlerToggle() {
         const isActive = dom.kuehlerAktiv.checked;
         dom.kuehlmodusWrapper.classList.toggle('disabled', !isActive);
-        dom.kuehlmodus.disabled = !isActive;
-        const isDehumidify = dom.kuehlmodus.value === 'dehumidify';
+        dom.kuehlmodus.forEach(radio => radio.disabled = !isActive);
+        const isDehumidify = document.querySelector('input[name="kuehlmodus"]:checked').value === 'dehumidify';
         dom.sollFeuchteWrapper.style.display = isActive && isDehumidify ? 'block' : 'none';
     }
     
     function syncAllSlidersToInputs(){
-        const tempVal = parseFloat(dom.tempZuluft.value);
-        if(!isNaN(tempVal)) {
-            dom.tempZuluftSlider.min = (tempVal - 6).toFixed(1);
-            dom.tempZuluftSlider.max = (tempVal + 6).toFixed(1);
-        }
-        const volVal = parseFloat(dom.volumenstrom.value);
-        if(!isNaN(volVal)) {
-            dom.volumenstromSlider.min = Math.round(volVal * 0.5 / 100) * 100;
-            dom.volumenstromSlider.max = Math.round(volVal * 1.5 / 100) * 100;
-        }
         syncSliderToInput(dom.volumenstrom, dom.volumenstromSlider, dom.volumenstromLabel);
         syncSliderToInput(dom.tempZuluft, dom.tempZuluftSlider, dom.tempZuluftLabel, true);
         syncSliderToInput(dom.rhZuluft, dom.rhZuluftSlider, dom.rhZuluftLabel, true);
@@ -326,6 +314,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function syncSliderToInput(input, slider, label, isFloat = false) {
         const newValue = parseFloat(input.value);
         if(isNaN(newValue)) return;
+        
+        if (input.id === 'volumenstrom') {
+            slider.min = Math.round(newValue * 0.5 / 100) * 100;
+            slider.max = Math.round(newValue * 1.5 / 100) * 100;
+        }
+        if (input.id === 'tempZuluft') {
+            slider.min = (newValue - 6).toFixed(1);
+            slider.max = (newValue + 6).toFixed(1);
+        }
         slider.value = newValue;
         label.textContent = isFloat ? newValue.toFixed(1) : newValue;
     }
@@ -349,44 +346,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
-    // --- INITIALIZATION: Radically simplified and explicit event listeners ---
+    
+    // --- INITIALIZATION ---
     function addEventListeners() {
-        // --- Buttons ---
         dom.resetBtn.addEventListener('click', resetToDefaults);
         dom.resetSlidersBtn.addEventListener('click', resetSlidersToRef);
         dom.setReferenceBtn.addEventListener('click', handleSetReference);
 
-        // --- Toggles and Selects ---
-        const toggles = [dom.kuehlerAktiv, dom.feuchteSollTyp, dom.kuehlmodus, dom.fanCostActive];
-        toggles.forEach(toggle => toggle.addEventListener('change', () => { handleKuehlerToggle(); calculateAll(); }));
-        
-        // --- Simple Inputs that only need validation and recalculation ---
         const simpleInputs = [
-            dom.tempAussen, dom.rhAussen, dom.druck, dom.preisWaerme, dom.preisStrom, dom.preisKaelte,
-            dom.xZuluft, dom.tempHeizVorlauf, dom.tempHeizRuecklauf, dom.tempKuehlVorlauf,
-            dom.tempKuehlRuecklauf, dom.sfp, dom.stundenHeizen, dom.stundenKuehlen
+            dom.tempAussen, dom.rhAussen, dom.druck, dom.preisWaerme, dom.preisStrom,
+            dom.preisKaelte, dom.xZuluft, dom.tempHeizVorlauf, dom.tempHeizRuecklauf, 
+            dom.tempKuehlVorlauf, dom.tempKuehlRuecklauf, dom.sfp, dom.stundenHeizen, dom.stundenKuehlen
         ];
-        simpleInputs.forEach(input => {
-            input.addEventListener('input', () => {
-                enforceLimits(input);
-                calculateAll();
-            });
-        });
-
-        // --- Linked Inputs (Hours/Days) ---
-        dom.betriebsstundenGesamt.addEventListener('input', (e) => {
-            enforceLimits(e.target);
-            updateBetriebszeit(e.target.id);
-            calculateAll();
-        });
-        dom.betriebstageGesamt.addEventListener('input', (e) => {
-            enforceLimits(e.target);
-            updateBetriebszeit(e.target.id);
-            calculateAll();
-        });
-
-        // --- Synced Inputs (Number fields) ---
+        simpleInputs.forEach(input => input.addEventListener('input', () => {enforceLimits(input); calculateAll();}));
+        
         const syncedNumberInputs = [dom.volumenstrom, dom.tempZuluft, dom.rhZuluft];
         syncedNumberInputs.forEach(input => {
             input.addEventListener('input', () => {
@@ -396,7 +369,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
         
-        // --- Synced Inputs (Sliders) ---
         const sliders = [dom.volumenstromSlider, dom.tempZuluftSlider, dom.rhZuluftSlider];
         sliders.forEach(slider => {
             slider.addEventListener('input', () => {
@@ -408,6 +380,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 calculateAll();
             });
         });
+
+        const toggles = [dom.kuehlerAktiv, dom.feuchteSollTyp, dom.fanCostActive];
+        toggles.forEach(toggle => toggle.addEventListener('change', () => { handleKuehlerToggle(); calculateAll(); }));
+        dom.kuehlmodus.forEach(radio => radio.addEventListener('change', () => { handleKuehlerToggle(); calculateAll(); }));
+
+        dom.betriebsstundenGesamt.addEventListener('input', (e) => { enforceLimits(e.target); updateBetriebszeit(e.target.id); calculateAll(); });
+        dom.betriebstageGesamt.addEventListener('input', (e) => { enforceLimits(e.target); updateBetriebszeit(e.target.id); calculateAll(); });
     }
 
     addEventListeners();
